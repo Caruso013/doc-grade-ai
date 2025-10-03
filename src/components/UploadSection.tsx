@@ -1,12 +1,17 @@
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, FileText, X } from "lucide-react";
+import { Upload, FileText, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const UploadSection = () => {
+interface UploadSectionProps {
+  onAnalysisComplete: (score: number) => void;
+}
+
+const UploadSection = ({ onAnalysisComplete }: UploadSectionProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -59,7 +64,7 @@ const UploadSection = () => {
     });
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!file) {
       toast({
         title: "Nenhum arquivo",
@@ -69,10 +74,47 @@ const UploadSection = () => {
       return;
     }
 
+    setIsAnalyzing(true);
     toast({
       title: "Análise iniciada",
-      description: "Aguarde enquanto processamos seu artigo. (Demo - API será integrada)",
+      description: "3 IAs estão avaliando seu artigo...",
     });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-document`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Erro ao analisar documento');
+      }
+
+      const data = await response.json();
+      
+      toast({
+        title: "Análise concluída!",
+        description: `Nota final: ${data.score}/10`,
+      });
+
+      onAnalysisComplete(data.score);
+      
+    } catch (error) {
+      console.error('Erro:', error);
+      toast({
+        title: "Erro na análise",
+        description: "Não foi possível analisar o documento. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -153,8 +195,16 @@ const UploadSection = () => {
                     onClick={handleAnalyze}
                     size="lg"
                     className="w-full"
+                    disabled={isAnalyzing}
                   >
-                    Analisar Artigo
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Analisando...
+                      </>
+                    ) : (
+                      'Analisar Artigo'
+                    )}
                   </Button>
                 </div>
               )}
